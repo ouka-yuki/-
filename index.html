@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyBuddy AI - 高校生向けAI成績管理エージェント</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- サイドナビゲーション -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon">
+                    <i data-lucide="graduation-cap"></i>
+                </div>
+                <span class="brand-name">StudyBuddy <span class="text-gradient">AI</span></span>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="#dashboard" class="menu-item active" data-tab="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>ダッシュボード</span>
+                </a>
+                <a href="#grades" class="menu-item" data-tab="grades">
+                    <i data-lucide="plus-circle"></i>
+                    <span>成績を入力する</span>
+                </a>
+                <a href="#ai-tutor" class="menu-item" data-tab="ai-tutor">
+                    <i data-lucide="bot"></i>
+                    <span>AI家庭教師</span>
+                </a>
+                <a href="#history" class="menu-item" data-tab="history">
+                    <i data-lucide="history"></i>
+                    <span>学習履歴</span>
+                </a>
+                <a href="#settings" class="menu-item" data-tab="settings">
+                    <i data-lucide="settings"></i>
+                    <span>設定</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-user" id="sidebar-user-info">
+                <div class="user-avatar">
+                    <i data-lucide="user"></i>
+                </div>
+                <div class="user-details">
+                    <p class="user-name" id="display-user-name">ゲストユーザー</p>
+                    <p class="user-grade" id="display-user-grade">学年未設定</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <!-- ヘッダー -->
+            <header class="main-header">
+                <div class="header-title">
+                    <h1 id="page-title">ダッシュボード</h1>
+                    <p class="text-muted" id="page-subtitle">現在の成績データとAIの分析概要です。</p>
+                </div>
+                <div class="header-actions">
+                    <!-- クリック可能なカレンダーバッジ -->
+                    <button class="academic-year-badge clickable" id="calendar-trigger-badge">
+                        <i data-lucide="calendar"></i>
+                        <span>学習計画カレンダー</span>
+                        <span class="calendar-alert-badge" id="calendar-todo-count" style="display: none;">0</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- コンテンツエリア -->
+            <div class="content-body">
+                
+                <!-- AIリマインダーバナー（ダッシュボード等で共通表示される上部枠） -->
+                <div id="ai-reminder-banner" class="ai-reminder-banner" style="display: none;">
+                    <div class="ai-reminder-icon">
+                        <i data-lucide="sparkles"></i>
+                    </div>
+                    <div class="ai-reminder-content" id="ai-reminder-text">
+                        <!-- AIからの直近テストまでのリマインダーが入る -->
+                    </div>
+                    <button class="ai-reminder-close" id="ai-reminder-close-btn" title="閉じる">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+
+                <!-- ================= DASHBOARD TAB ================= -->
+                <section id="tab-dashboard" class="tab-content active">
+                    <!-- 統計フィルター -->
+                    <div class="filter-bar card">
+                        <div class="filter-title">
+                            <i data-lucide="filter" style="width: 18px; height: 18px; color: var(--color-secondary);"></i>
+                            <span>成績データの集計範囲</span>
+                        </div>
+                        <div class="filter-options">
+                            <select id="dashboard-filter">
+                                <option value="all">すべてのテスト・模試</option>
+                                <option value="定期テスト">定期テストのみ</option>
+                                <option value="外部模試-すべて">外部模試（すべて）</option>
+                                <option value="進研模試">進研模試のみ</option>
+                                <option value="河合全統模試">河合全統模試のみ</option>
+                                <option value="駿台模試">駿台模試のみ</option>
+                                <option value="東進模試">東進模試のみ</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- クイック統計カード -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-card-glow"></div>
+                            <div class="stat-icon icon-blue">
+                                <i data-lucide="award"></i>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-label" id="stat-latest-label">最新のテスト</span>
+                                <h3 class="stat-value" id="stat-latest-value" style="font-size: 1.1rem; font-weight: 700; max-width: 250px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-glow"></div>
+                            <div class="stat-icon icon-purple">
+                                <i data-lucide="calendar"></i>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-label" id="stat-next-todo-label">次の予定</span>
+                                <h3 class="stat-value" id="stat-next-todo-value" style="font-size: 1.1rem; font-weight: 700; max-width: 250px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">予定なし</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon icon-pink">
+                                <i data-lucide="target"></i>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-label">現在の学習目標</span>
+                                <h3 class="stat-value" id="stat-target-value" style="font-size: 1.1rem; font-weight: 700; max-width: 250px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">目標未設定</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- グラフ & 最新AI分析 -->
+                    <div class="dashboard-grid">
+                        <!-- グラフカード -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h2 class="card-title">成績の推移</h2>
+                                <p class="card-subtitle" id="chart-subtitle">各科目の得点率（％）の推移</p>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="gradeChart"></canvas>
+                                </div>
+                                <div id="no-data-message" class="no-data-overlay">
+                                    <i data-lucide="bar-chart-2"></i>
+                                    <p>選択された条件に一致する成績データがありません。成績を入力してください。</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 最新AIアドバイスのサマリー -->
+                        <div class="card ai-summary-card">
+                            <div class="card-header">
+                                <div class="ai-header-title">
+                                    <div class="ai-badge">
+                                        <i data-lucide="sparkles"></i>
+                                        <span>AI Agent</span>
+                                    </div>
+                                    <h2 class="card-title">AI家庭教師のひとこと</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="ai-bubble" id="dashboard-ai-advice">
+                                    成績データが入力されると、あなたの学年や模試の難易度（駿台、河合、進研など）に合わせた強み・弱みの分析とアドバイスが表示されます。
+                                </div>
+                                <div class="ai-action-btn">
+                                    <button class="btn btn-secondary btn-full" id="go-to-ai-tutor-btn">
+                                        <span>AI家庭教師に詳しく聞く</span>
+                                        <i data-lucide="arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= GRADES TAB ================= -->
+                <section id="tab-grades" class="tab-content">
+                    <div class="grades-container">
+                        <!-- 入力フォーム -->
+                        <div class="card form-card">
+                            <div class="card-header">
+                                <h2 class="card-title" id="form-title">テスト・模試の成績を登録</h2>
+                                <p class="card-subtitle" id="form-subtitle">点数と満点を入力し、必要に応じて問題用紙の写真も登録しましょう。</p>
+                            </div>
+                            <div class="card-body">
+                                <form id="grade-form">
+                                    <!-- 編集用の隠しフィールド -->
+                                    <input type="hidden" id="edit-grade-id" value="">
+                                    
+                                    <div class="form-group">
+                                        <label for="test-type">テスト・模試の種類 <span class="required">*</span></label>
+                                        <select id="test-type" required>
+                                            <option value="" disabled selected>種類を選択してください</option>
+                                            <option value="定期テスト">定期テスト</option>
+                                            <option value="進研模試">外部模試：進研模試 (標準)</option>
+                                            <option value="河合全統模試">外部模試：河合全統模試 (標準〜難)</option>
+                                            <option value="駿台模試">外部模試：駿台模試 (超難関)</option>
+                                            <option value="東進模試">外部模試：東進模試 (実践)</option>
+                                            <option value="小テスト/その他">小テスト/その他</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group-row">
+                                        <div class="form-group">
+                                            <label for="test-date">受験日・実施日 <span class="required">*</span></label>
+                                            <input type="date" id="test-date" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="test-photo">問題用紙・解答用紙の写真（任意）</label>
+                                            <div class="file-upload-wrapper">
+                                                <input type="file" id="test-photo" accept="image/*">
+                                                <div class="file-upload-placeholder" id="photo-placeholder-text">
+                                                    <i data-lucide="image"></i>
+                                                    <span>画像を追加（カメラ撮影など）</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 写真のプレビュー -->
+                                    <div id="photo-preview-container" class="photo-preview-container" style="display: none;">
+                                        <div class="preview-header">
+                                            <span>アップロード写真プレビュー:</span>
+                                            <button type="button" class="btn-text text-pink" id="remove-photo-btn">写真を削除</button>
+                                        </div>
+                                        <img id="photo-preview" src="" alt="Test Preview">
+                                    </div>
+
+                                    <h3 class="form-section-title">各科目の点数と満点設定</h3>
+                                    <p class="text-muted" style="font-size: 0.8rem; margin-top: -12px; margin-bottom: 20px;">
+                                        ※満点が異なるテスト（200点満点など）は、右側の「満点」の数値を変更してください。
+                                    </p>
+                                    
+                                    <div class="subjects-settings-list">
+                                        <!-- 英語 -->
+                                        <div class="subject-setting-row">
+                                            <span class="subject-name">英語</span>
+                                            <div class="subject-inputs">
+                                                <input type="number" id="score-english" min="0" max="200" placeholder="点数">
+                                                <span class="slash">/</span>
+                                                <input type="number" id="max-english" min="10" max="200" value="100" placeholder="満点">
+                                            </div>
+                                        </div>
+                                        <!-- 数学 -->
+                                        <div class="subject-setting-row">
+                                            <span class="subject-name">数学</span>
+                                            <div class="subject-inputs">
+                                                <input type="number" id="score-math" min="0" max="200" placeholder="点数">
+                                                <span class="slash">/</span>
+                                                <input type="number" id="max-math" min="10" max="200" value="100" placeholder="満点">
+                                            </div>
+                                        </div>
+                                        <!-- 国語 -->
+                                        <div class="subject-setting-row">
+                                            <span class="subject-name">国語</span>
+                                            <div class="subject-inputs">
+                                                <input type="number" id="score-japanese" min="0" max="200" placeholder="点数">
+                                                <span class="slash">/</span>
+                                                <input type="number" id="max-japanese" min="10" max="200" value="100" placeholder="満点">
+                                            </div>
+                                        </div>
+                                        <!-- 理科 -->
+                                        <div class="subject-setting-row">
+                                            <span class="subject-name">理科</span>
+                                            <div class="subject-inputs">
+                                                <input type="number" id="score-science" min="0" max="200" placeholder="点数">
+                                                <span class="slash">/</span>
+                                                <input type="number" id="max-science" min="10" max="200" value="100" placeholder="満点">
+                                            </div>
+                                        </div>
+                                        <!-- 社会 -->
+                                        <div class="subject-setting-row">
+                                            <span class="subject-name">社会</span>
+                                            <div class="subject-inputs">
+                                                <input type="number" id="score-social" min="0" max="200" placeholder="点数">
+                                                <span class="slash">/</span>
+                                                <input type="number" id="max-social" min="10" max="200" value="100" placeholder="満点">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-actions-row">
+                                        <button type="submit" class="btn btn-primary" id="submit-grade-btn" style="flex: 2;">
+                                            <i data-lucide="save"></i>
+                                            <span>成績を保存する</span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" id="cancel-edit-btn" style="display: none; flex: 1;">
+                                            <span>キャンセル</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- 最近登録した成績一覧 -->
+                        <div class="card list-card">
+                            <div class="card-header">
+                                <h2 class="card-title">登録済みの成績一覧</h2>
+                                <p class="card-subtitle">これまでに登録されたテストの一覧です（※削除はできず、編集のみ可能です）。</p>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="grades-table">
+                                        <thead>
+                                            <tr>
+                                                <th>テスト名</th>
+                                                <th>種類</th>
+                                                <th>実施日</th>
+                                                <th>得点率平均</th>
+                                                <th>英</th>
+                                                <th>数</th>
+                                                <th>国</th>
+                                                <th>理</th>
+                                                <th>社</th>
+                                                <th>写真</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="grades-table-body">
+                                            <!-- JSで動的に追加 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="no-table-data" class="no-data-placeholder">
+                                    <p>登録された成績はありません。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= AI TUTOR TAB (UI IMPROVED) ================= -->
+                <section id="tab-ai-tutor" class="tab-content">
+                    <div class="ai-tutor-container">
+                        <!-- 左側：AI分析パネル (幅狭め) -->
+                        <div class="ai-analysis-panel">
+                            <div class="card analysis-card">
+                                <div class="card-header">
+                                    <h2 class="card-title">
+                                        <i data-lucide="sparkles" class="text-purple"></i>
+                                        <span>総合成績分析</span>
+                                    </h2>
+                                    <p class="card-subtitle">AIがあなたの強みと弱みを分析しました。</p>
+                                </div>
+                                <div class="card-body">
+                                    <div class="analysis-section">
+                                        <h4 class="analysis-section-subtitle text-green">
+                                            <i data-lucide="check-circle-2"></i>
+                                            <span>あなたの強み（得意分野）</span>
+                                        </h4>
+                                        <p class="analysis-text" id="ai-strengths">成績データがありません。まずは成績を入力してください。</p>
+                                    </div>
+                                    <hr class="divider">
+                                    <div class="analysis-section">
+                                        <h4 class="analysis-section-subtitle text-pink">
+                                            <i data-lucide="alert-triangle"></i>
+                                            <span>あなたの弱み（対策が必要な分野）</span>
+                                        </h4>
+                                        <p class="analysis-text" id="ai-weaknesses">成績データがありません。まずは成績を入力してください。</p>
+                                    </div>
+                                    <hr class="divider">
+                                    <div class="analysis-section">
+                                        <h4 class="analysis-section-subtitle text-blue">
+                                            <i data-lucide="book-open"></i>
+                                            <span>おすすめの勉強法</span>
+                                        </h4>
+                                        <p class="analysis-text" id="ai-study-methods">成績データがありません。まずは成績を入力してください。</p>
+                                    </div>
+                                    <hr class="divider">
+                                    <div class="analysis-section text-problem-section">
+                                        <h4 class="analysis-section-subtitle text-yellow">
+                                            <i data-lucide="help-circle"></i>
+                                            <span>あなたにおすすめのオリジナル問題</span>
+                                        </h4>
+                                        <div class="recommended-problem" id="ai-recommended-problems">
+                                            <p class="analysis-text">成績データがありません。まずは成績を入力してください。</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 中央・右側：AI家庭教師チャット（ドーンと中央配置） -->
+                        <div class="ai-chat-panel">
+                            <div class="card chat-card">
+                                <div class="card-header chat-header">
+                                    <div class="chat-agent-info">
+                                        <div class="chat-agent-avatar">
+                                            <i data-lucide="bot"></i>
+                                            <span class="online-indicator"></span>
+                                        </div>
+                                        <div>
+                                            <h3 class="chat-agent-name" id="chat-agent-title">AI家庭教師 Buddy</h3>
+                                            <p class="chat-agent-status">あなたの成績データ、学年、学習計画をすべて把握しています</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body chat-body" id="chat-messages">
+                                    <div class="chat-message bot">
+                                        <div class="message-content">
+                                            こんにちは！私はAI家庭教師のBuddy（バディ）です。あなたの成績データ（模試の難易度や各科目の満点）、学年、さらに学習スケジュールを元に、最適な学習指導をします。
+                                            何でも気軽に質問してくださいね！
+                                            <br><br>
+                                            <strong>よくある質問の例:</strong>
+                                            <ul>
+                                                <li>「私の弱点科目を克服するための勉強計画を立てて」</li>
+                                                <li>「次のテスト（模試）までに何を終わらせたらいい？」</li>
+                                                <li>「苦手な科目の対策問題を解いてみたい！」</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <!-- メッセージ履歴がここに入る -->
+                                </div>
+                                <div class="card-footer chat-footer">
+                                    <form id="chat-form">
+                                        <input type="text" id="chat-input" placeholder="AI家庭教師に質問してみよう..." autocomplete="off">
+                                        <button type="submit" class="btn btn-primary btn-icon">
+                                            <i data-lucide="send"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= HISTORY TAB ================= -->
+                <section id="tab-history" class="tab-content">
+                    <div class="card history-card">
+                        <div class="card-header">
+                            <h2 class="card-title">学習履歴とAIアドバイスの記録</h2>
+                            <p class="card-subtitle">過去の成績と、その時にAI家庭教師から受けたアドバイス、登録した写真の記録です。</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="timeline" id="history-timeline">
+                                <!-- JSで動的に追加 -->
+                            </div>
+                            <div id="no-history-placeholder" class="no-data-placeholder">
+                                <i data-lucide="calendar"></i>
+                                <p>履歴がありません。成績を登録して、AIの分析を受けましょう。</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= SETTINGS TAB ================= -->
+                <section id="tab-settings" class="tab-content">
+                    <div class="settings-grid">
+                        <div class="card settings-card">
+                            <div class="card-header">
+                                <h2 class="card-title">プロフィール設定</h2>
+                                <p class="card-subtitle">あなたの基本情報を設定します。「私は誰か」をAIに教えましょう。</p>
+                            </div>
+                            <div class="card-body">
+                                <form id="settings-form">
+                                    <div class="form-group">
+                                        <label for="user-name">お名前 / ニックネーム</label>
+                                        <input type="text" id="user-name" value="ゲストユーザー" placeholder="例: 太郎">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-grade">現在の学年 <span class="required">*</span></label>
+                                        <select id="user-grade" required>
+                                            <option value="" disabled selected>学年を選択してください</option>
+                                            <option value="高校1年生">高校1年生</option>
+                                            <option value="高校2年生">高校2年生</option>
+                                            <option value="高校3年生（受験生）">高校3年生（受験生）</option>
+                                            <option value="既卒・その他">既卒・その他</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-target">目標（志望校や目標点数など）</label>
+                                        <textarea id="user-target" rows="3" placeholder="例: 〇〇大学合格！次の模試で数学70点以上！"></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i data-lucide="save"></i>
+                                        <span>設定を保存する</span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card info-card">
+                            <div class="card-header">
+                                <h2 class="card-title">StudyBuddy AI について</h2>
+                                <p class="card-subtitle">アプリのバージョンと基本情報です。</p>
+                            </div>
+                            <div class="card-body">
+                                <div class="info-list">
+                                    <div class="info-item">
+                                        <span class="info-label">アプリ名</span>
+                                        <span class="info-value">StudyBuddy AI (プロトタイプ v1.1)</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">バージョン</span>
+                                        <span class="info-value">1.1.0 (Advanced Features)</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">データ保存先</span>
+                                        <span class="info-value">ローカルストレージ（ブラウザ内）</span>
+                                    </div>
+                                </div>
+                                <hr class="divider">
+                                <div class="danger-zone">
+                                    <h4 class="danger-title text-pink">データの初期化</h4>
+                                    <p class="text-muted">アプリ内に保存されているすべての成績データ、カレンダー予定、設定を消去します。</p>
+                                    <button class="btn btn-danger" id="clear-all-data-btn">
+                                        <i data-lucide="trash-2"></i>
+                                        <span>データをすべて削除</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- ================= SLIDE-IN CALENDAR SIDEBAR ================= -->
+    <div class="calendar-overlay" id="calendar-overlay"></div>
+    <aside class="calendar-sidebar" id="calendar-sidebar">
+        <div class="calendar-sidebar-header">
+            <h2 class="calendar-sidebar-title">
+                <i data-lucide="calendar" class="text-purple"></i>
+                <span>学習計画 ＆ 予定管理</span>
+            </h2>
+            <button class="btn-close" id="calendar-close-btn" title="閉じる">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        
+        <div class="calendar-sidebar-body">
+            <!-- 予定追加フォーム -->
+            <div class="card calendar-form-card">
+                <h3 class="card-title" style="font-size: 1rem; margin-bottom: 12px;">新しい予定・テストを追加</h3>
+                <form id="calendar-form">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="todo-title" style="font-size: 0.8rem; margin-bottom: 4px;">予定・テスト名 <span class="required">*</span></label>
+                        <input type="text" id="todo-title" placeholder="例: 進研模試、ワーク提出" required style="padding: 8px 12px; font-size: 0.85rem;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="todo-date" style="font-size: 0.8rem; margin-bottom: 4px;">期日・実施日 <span class="required">*</span></label>
+                        <input type="date" id="todo-date" required style="padding: 8px 12px; font-size: 0.85rem;">
+                    </div>
+                    <div class="form-group checkbox-group" style="margin-bottom: 16px;">
+                        <input type="checkbox" id="todo-reminder" checked>
+                        <label for="todo-reminder" style="display: inline; font-size: 0.8rem; cursor: pointer;">
+                            AIリマインダーを有効にする (ダッシュボードにカウントダウンを表示)
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" style="padding: 10px; font-size: 0.85rem;">
+                        <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                        <span>予定を追加する</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- 予定一覧 -->
+            <div class="todo-list-container">
+                <h3 class="todo-section-title">登録済みの予定一覧</h3>
+                <div class="todo-list" id="calendar-todo-list">
+                    <!-- JSで動的に追加 -->
+                </div>
+                <div id="no-todo-placeholder" class="no-data-placeholder" style="padding: 24px 0;">
+                    <i data-lucide="clipboard-list" style="width: 32px; height: 32px;"></i>
+                    <p style="font-size: 0.85rem;">登録された予定はありません。</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 写真拡大表示用モーダル -->
+    <div class="image-modal" id="image-modal">
+        <span class="image-modal-close" id="image-modal-close-btn">&times;</span>
+        <img class="image-modal-content" id="image-modal-img" src="">
+        <div id="image-modal-caption"></div>
+    </div>
+    
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
