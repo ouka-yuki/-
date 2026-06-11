@@ -1,4 +1,263 @@
 // ==========================================================================
+// SUPABASE + GEMINI API 設定
+// ==========================================================================
+const SUPABASE_URL = 'https://cobuwbjoaznyldkfgbog.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvYnV3YmpvYXpueWxka2ZnYm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwOTU4MTcsImV4cCI6MjA5NjY3MTgxN30.Q6_Ep0dLEwhv0-dkmdLas-jU-9lDo9fXtk2cNlk7Iy4';
+const GEMINI_API_KEY = ''; // ← Gemini APIキー（AIzaSy...）をここに入力
+
+let supabaseClient = null;
+
+// ユーザーIDを取得 or 新規発行（ログイン不要の個人識別用）
+function getOrCreateUserId() {
+    let uid = localStorage.getItem('studybuddy_user_id');
+    if (!uid) {
+        uid = 'u_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('studybuddy_user_id', uid);
+    }
+    return uid;
+}
+
+// Supabase初期化
+async function initSupabase() {
+    if (typeof supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Supabase接続完了');
+        await loadFromSupabase();
+    } else {
+        console.warn('⚠️ Supabase未設定 - ローカルストレージのみ使用');
+    }
+}
+
+// Supabaseからデータ読み込み
+async function loadFromSupabase() {
+    if (!supabaseClient) return;
+    const uid = getOrCreateUserId();
+    try {
+        // 設定を取得
+        const { data: settingsData } = await supabaseClient
+            .from('settings')
+            .select('*')
+            .eq('user_id', uid)
+            .maybeSingle();
+        if (settingsData) {
+            state.settings = {
+                name: settingsData.name || 'ゲストユーザー',
+                grade: settingsData.grade || '',
+                target: settingsData.target || ''
+            };
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(state.settings));
+        }
+
+        // 成績を取得
+        const { data: gradesData } = await supabaseClient
+            .from('grades')
+            .select('*')
+            .eq('user_id', uid)
+            .order('date', { ascending: false });
+        if (gradesData && gradesData.length > 0) {
+            state.grades = gradesData.map(g => ({
+                id: g.id,
+                name: g.name,
+                date: g.date,
+                type: g.type,
+                scores: g.scores,
+                maxScores: g.max_scores,
+                total: g.total,
+                maxTotal: g.max_total,
+                averageRate: g.average_rate,
+                photo: g.photo || null
+            }));
+            localStorage.setItem(STORAGE_KEYS.GRADES, JSON.stringify(state.grades));
+        }
+
+        // 予定を取得
+        const { data: todosData } = await supabaseClient
+            .from('todos')
+            .select('*')
+            .eq('user_id', uid)
+            .order('date', { ascending: true });
+        if (todosData && todosData.length > 0) {
+            state.todos = todosData.map(t => ({
+                id: t.id,
+                title: t.title,
+                date: t.date,
+                reminder: t.reminder
+            }));
+            localStorage.setItem(STORAGE_KEYS.TODOS, JSON.stringify(state.todos));
+        }
+
+        // UIを更新
+        updateUIProfile();
+        updateGradesTable();
+        updateStatsAndChart();
+        updateAIAnalysis();
+        updateHistoryTimeline();
+        updateTodoList();
+        triggerAIReminder();
+        console.log('✅ Supabaseからデータを読み込みました');
+    } catch (err) {
+        console.error('❌ Supabase読み込みエラー:', err);
+    }
+}
+
+// 設定をSupabaseに同期
+async function syncSettingsToSupabase() {
+    if (!supabaseClient) return;
+    const uid = getOrCreateUserId();
+    try {
+        await supabaseClient.from('settings').upsert({
+            user_id: uid,
+            name: state.settings.name,
+            grade: state.settings.grade,
+            target: state.settings.target,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+    } catch (err) {
+        console.error('❌ 設定の同期エラー:', err);
+    }
+}
+
+// 成績をSupabaseに同期
+async function syncGradesToSupabase() {
+    if (!supabaseClient || state.grades.length === 0) return;
+    const uid = getOrCreateUserId();
+    try {
+        const rows = state.grades.map(g => ({
+            id: g.id,
+            user_id: uid,
+            name: g.name,
+            date: g.date,
+            type: g.type,
+            scores: g.scores,
+            max_scores: g.maxScores,
+            total: g.total,
+            max_total: g.maxTotal,
+            average_rate: g.averageRate,
+            photo: g.photo || null
+        }));
+        await supabaseClient.from('grades').upsert(rows, { onConflict: 'id' });
+    } catch (err) {
+        console.error('❌ 成績の同期エラー:', err);
+    }
+}
+
+// 予定をSupabaseに同期
+async function syncTodosToSupabase() {
+    if (!supabaseClient || state.todos.length === 0) return;
+    const uid = getOrCreateUserId();
+    try {
+        const rows = state.todos.map(t => ({
+            id: t.id,
+            user_id: uid,
+            title: t.title,
+            date: t.date,
+            reminder: t.reminder
+        }));
+        await supabaseClient.from('todos').upsert(rows, { onConflict: 'id' });
+    } catch (err) {
+        console.error('❌ 予定の同期エラー:', err);
+    }
+}
+
+// Supabaseから特定の予定を削除
+async function deleteTodoFromSupabase(todoId) {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.from('todos').delete().eq('id', todoId);
+    } catch (err) {
+        console.error('❌ 予定削除エラー:', err);
+    }
+}
+
+// Supabaseから全データ削除
+async function clearSupabaseData() {
+    if (!supabaseClient) return;
+    const uid = getOrCreateUserId();
+    try {
+        await supabaseClient.from('grades').delete().eq('user_id', uid);
+        await supabaseClient.from('todos').delete().eq('user_id', uid);
+        await supabaseClient.from('settings').delete().eq('user_id', uid);
+    } catch (err) {
+        console.error('❌ Supabase全削除エラー:', err);
+    }
+}
+
+// ==========================================================================
+// GEMINI API 呼び出し
+// ==========================================================================
+async function callGeminiAPI(userMessage) {
+    if (!GEMINI_API_KEY) return null;
+
+    const name = state.settings.name || 'ユーザー';
+    const grade = state.settings.grade || '高校生';
+    const target = state.settings.target || '未設定';
+    const subjectNames = { english: '英語', math: '数学', japanese: '国語', science: '理科', social: '社会' };
+
+    // 最近の成績（直近3件）をテキスト化
+    let gradesContext = '成績データなし';
+    if (state.grades.length > 0) {
+        const recent = [...state.grades]
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 3);
+        gradesContext = recent.map(g => {
+            const scores = Object.keys(g.scores)
+                .filter(k => g.scores[k] !== null && g.scores[k] !== '')
+                .map(k => `${subjectNames[k]}: ${g.scores[k]}/${g.maxScores[k]}点 (${Math.round(g.scores[k] / g.maxScores[k] * 100)}%)`)
+                .join(', ');
+            return `・${g.name}（${g.type}, ${g.date}）: ${scores}`;
+        }).join('\n');
+    }
+
+    // 直近の予定をテキスト化
+    let todosContext = '予定なし';
+    const now = new Date();
+    const futureTodos = state.todos
+        .filter(t => new Date(t.date) >= now)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (futureTodos.length > 0) {
+        todosContext = futureTodos.slice(0, 5).map(t => `・${t.title}（${t.date}）`).join('\n');
+    }
+
+    const prompt = `あなたは「Buddy（バディ）」という名前のAI家庭教師です。日本の高校生に対して、親しみやすく具体的で実践的なアドバイスを日本語で提供してください。
+
+【生徒の情報】
+- 名前: ${name}
+- 学年: ${grade}
+- 目標: ${target}
+
+【最近の成績（直近3件）】
+${gradesContext}
+
+【登録されている学習予定】
+${todosContext}
+
+【生徒からのメッセージ】
+${userMessage}
+
+上記の情報を踏まえて、この生徒に最適化されたアドバイスを400文字以内で答えてください。マークダウン記法（**や##など）は使わず、読みやすい日本語の文章で書いてください。`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.75, maxOutputTokens: 600 }
+                })
+            }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+    } catch (err) {
+        console.error('❌ Gemini APIエラー:', err);
+        return null;
+    }
+}
+
+// ==========================================================================
 // STATE MANAGEMENT & LOCAL STORAGE
 // ==========================================================================
 let state = {
@@ -59,17 +318,20 @@ function loadState() {
     }
 }
 
-// Save data to localStorage
+// Save data to localStorage（＋バックグラウンドでSupabaseに同期）
 function saveSettings() {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(state.settings));
+    syncSettingsToSupabase(); // バックグラウンド同期
 }
 
 function saveGrades() {
     localStorage.setItem(STORAGE_KEYS.GRADES, JSON.stringify(state.grades));
+    syncGradesToSupabase(); // バックグラウンド同期
 }
 
 function saveTodos() {
     localStorage.setItem(STORAGE_KEYS.TODOS, JSON.stringify(state.todos));
+    syncTodosToSupabase(); // バックグラウンド同期
 }
 
 // ==========================================================================
@@ -78,7 +340,8 @@ function saveTodos() {
 let gradeChartInstance = null;
 let currentUploadedPhotoBase64 = null;
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+    // まずローカルストレージからすぐ読み込んでUIを表示
     loadState();
     
     // Initialize UI Elements
@@ -94,10 +357,13 @@ document.addEventListener("DOMContentLoaded", () => {
     updateAIAnalysis();
     updateHistoryTimeline();
     updateTodoList();
-    triggerAIReminder(); // Run AI scheduler alerts
+    triggerAIReminder();
     
     // Set up event listeners
     initEventListeners();
+
+    // Supabaseに接続してクラウドのデータで上書き（バックグラウンド）
+    await initSupabase();
 });
 
 // ==========================================================================
@@ -1179,7 +1445,7 @@ function updateHistoryTimeline() {
 // ==========================================================================
 // CHAT PANEL LOGIC (AI TUTOR INTERACTIVE CHAT SIMULATOR)
 // ==========================================================================
-function handleChatSubmit(e) {
+async function handleChatSubmit(e) {
     e.preventDefault();
     const chatInput = document.getElementById("chat-input");
     const chatMessages = document.getElementById("chat-messages");
@@ -1188,24 +1454,38 @@ function handleChatSubmit(e) {
     const messageText = chatInput.value.trim();
     if (!messageText) return;
 
-    // 1. Append User Message
+    // 1. ユーザーメッセージを表示
     appendChatMessage("user", messageText);
     chatInput.value = "";
+    chatInput.disabled = true; // 送信中は入力を無効化
 
-    // 2. Typing Indicator Simulator
+    // 2. タイピングインジケーター表示
     const typingDiv = document.createElement("div");
     typingDiv.className = "chat-message bot typing";
     typingDiv.innerHTML = `<div class="message-content"><span class="typing-dots"><span>.</span><span>.</span><span>.</span></span></div>`;
     chatMessages.appendChild(typingDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // 3. Generate Answer & Respond with delay
-    setTimeout(() => {
-        typingDiv.remove();
-        const botResponse = getSimulatedAIResponse(messageText);
-        appendChatMessage("bot", botResponse);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }, 1200);
+    // 3. Gemini APIを呼び出し（失敗時はシミュレーションにフォールバック）
+    let botResponse = null;
+    if (GEMINI_API_KEY) {
+        botResponse = await callGeminiAPI(messageText);
+    }
+    if (!botResponse) {
+        // APIキー未設定 or エラー時のフォールバック
+        await new Promise(resolve => setTimeout(resolve, 800));
+        botResponse = getSimulatedAIResponse(messageText);
+        if (!GEMINI_API_KEY) {
+            botResponse = '⚠️ Gemini APIキーが設定されていません。app.jsの GEMINI_API_KEY に取得したキーを入力してください。\n\n' + botResponse;
+        }
+    }
+
+    // 4. 回答を表示
+    typingDiv.remove();
+    appendChatMessage("bot", botResponse);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    chatInput.disabled = false;
+    chatInput.focus();
 }
 
 function appendChatMessage(sender, text) {
@@ -1505,18 +1785,16 @@ function showNotification(message) {
     }, 3000);
 }
 
-// Clear all data (reset app)
+// Clear all data (reset app) - ローカル＆Supabase両方を削除
 function clearAllData() {
     if (confirm("【警告】すべての成績データ、カレンダーの予定、プロフィール設定を完全に削除します。よろしいですか？")) {
+        clearSupabaseData(); // Supabaseからも削除（バックグラウンド）
         localStorage.clear();
         state = {
             settings: { name: "ゲストユーザー", grade: "", target: "" },
             grades: [],
             todos: []
         };
-        saveSettings();
-        saveGrades();
-        saveTodos();
         location.reload();
     }
 }
